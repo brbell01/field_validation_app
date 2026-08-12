@@ -1,0 +1,9 @@
+{
+  "name": "Geolocation Field Verification",
+  "short_name": "Field Verify",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f2",
+  "theme_color": "#294c3b",
+  "description": "Personal field app for confirming or updating geolocation classifications."
+}

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#294c3b">
+  <title>Field Verification</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3yn5p1xcq+8ICBnnMPZxiZEM8TojM=" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Field Verification</h1>
+      <p>Confirm or update classifications in the field.</p>
+    </div>
+    <button id="installBtn" class="button secondary hidden" type="button">Install</button>
+  </header>
+
+  <main class="layout">
+    <section class="panel import-panel">
+      <div class="stats">
+        <div><span id="totalCount">0</span><small>locations</small></div>
+        <div><span id="reviewedCount">0</span><small>reviewed</small></div>
+        <div><span id="changedCount">0</span><small>changed</small></div>
+      </div>
+      <div class="import-row">
+        <label class="file-label button secondary">
+          Load CSV
+          <input id="fileInput" type="file" accept=".csv,text/csv" hidden>
+        </label>
+        <button id="sampleBtn" class="button ghost" type="button">Load sample</button>
+        <button id="resetBtn" class="button ghost danger" type="button">Clear saved data</button>
+      </div>
+      <p class="hint">CSV: latitude/longitude (or lat/lon), plus classification. id and name are optional.</p>
+      <div id="message" class="message" aria-live="polite"></div>
+    </section>
+
+    <section id="workspace" class="workspace hidden">
+      <div class="record-head">
+        <div>
+          <div class="eyebrow">Current location</div>
+          <h2 id="siteName">—</h2>
+          <div id="siteMeta" class="muted">—</div>
+        </div>
+        <div id="statusPill" class="pill">Not reviewed</div>
+      </div>
+
+      <div class="progress-wrap">
+        <div id="progressLabel" class="muted">0 of 0</div>
+        <div class="progress"><div id="progressBar"></div></div>
+      </div>
+
+      <section class="map-card">
+        <div id="map" aria-label="Hybrid satellite map centered on current point"></div>
+        <div class="map-tools">
+          <button id="locateBtn" class="button secondary" type="button">Use my location</button>
+          <div id="distanceText" class="distance">Location not enabled</div>
+          <a id="directionsLink" class="button ghost" target="_blank" rel="noopener">Directions</a>
+        </div>
+      </section>
+
+      <section class="classification-card">
+        <div class="original-row">
+          <span>Existing classification</span>
+          <strong id="originalClass">—</strong>
+        </div>
+        <h3>Field classification</h3>
+        <div id="classButtons" class="class-grid"></div>
+        <label>
+          Other classification
+          <input id="customClass" type="text" placeholder="Enter classification">
+        </label>
+        <label>
+          Notes
+          <textarea id="notes" rows="3" placeholder="Reason for change, field condition, landmark, uncertainty…"></textarea>
+        </label>
+        <div class="action-grid">
+          <button id="confirmBtn" class="button primary" type="button">Confirm existing</button>
+          <button id="saveBtn" class="button secondary" type="button">Save selected</button>
+        </div>
+      </section>
+
+      <nav class="record-nav" aria-label="Location navigation">
+        <button id="prevBtn" class="button ghost" type="button">← Previous</button>
+        <button id="nextUnreviewedBtn" class="button secondary" type="button">Next unreviewed</button>
+        <button id="nextBtn" class="button ghost" type="button">Next →</button>
+      </nav>
+
+      <section class="export-panel">
+        <div>
+          <h3>Export results</h3>
+          <p class="hint">Exports the original classification, field classification, review status, notes and review timestamp.</p>
+        </div>
+        <button id="exportBtn" class="button primary" type="button">Download updated CSV</button>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
