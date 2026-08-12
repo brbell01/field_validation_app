@@ -37,4 +37,8 @@ Upload the folder to any static host such as GitHub Pages, Netlify or Cloudflare
 
 ## Offline behavior
 The app shell is cached after the first load. Live satellite imagery still requires a network connection because imagery tiles are not bulk-downloaded by this app.
-# field_validation_app
+
+
+## Confidence filtering
+
+Include a `confidence` column in the CSV with one of: `Very low`, `Low`, `Medium`, `High`, or `Very high`. The cumulative slider lets you review the least-certain points first without deleting or altering excluded rows. Aliases `confidence_level` and `certainty` are also accepted.
