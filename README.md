@@ -41,4 +41,8 @@ The app shell is cached after the first load. Live satellite imagery still requi
 
 ## Confidence filtering
 
-Include a `confidence` column in the CSV with one of: `Very low`, `Low`, `Medium`, `High`, or `Very high`. The cumulative slider lets you review the least-certain points first without deleting or altering excluded rows. Aliases `confidence_level` and `certainty` are also accepted.
+Include a `confidence` column using the full numbered labels: `1 - Very low confidence`, `2 - Low confidence`, `3 - Medium confidence`, `4 - High confidence`, or `5 - Very high confidence`. The app preserves that full source text for display/export and uses the complete numbered label to determine the cumulative filter. Common separators after the number (hyphen, en dash, em dash, colon, period, or parenthesis) are accepted. Aliases `confidence_level` and `certainty` are also accepted. Older unnumbered labels remain supported for backward compatibility.
+
+## Database compatibility
+
+The app recognizes the working database fields `class`, `conf_level`, `confidence`, `notes`, and `Check`. Confidence filtering uses `conf_level` (for example `2 - Low`), not the numeric `confidence` score. Export preserves original database columns and adds `field_classification`, `review_status`, `reviewed_at`, and lowercase `check`. If the user changes a classification, `check` is set to `field validated`; confirming the existing classification leaves the prior check value unchanged.

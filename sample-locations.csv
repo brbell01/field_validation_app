@@ -1,4 +1,4 @@
 id,name,latitude,longitude,classification,confidence
-001,Location 001,41.0391,-73.8684,Category A,Very low
-002,Location 002,41.0402,-73.8667,Category B,Low
-003,Location 003,41.0378,-73.8701,Category A,Medium
+001,Location 001,41.0391,-73.8684,Category A,1 - Very low confidence
+002,Location 002,41.0402,-73.8667,Category B,2 - Low confidence
+003,Location 003,41.0378,-73.8701,Category A,3 - Medium confidence

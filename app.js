@@ -1,21 +1,32 @@
-const STORAGE_KEY = 'fieldVerifier.v2';
-const CONFIDENCE_LEVELS=['Very low','Low','Medium','High','Very high'];
+const STORAGE_KEY = 'fieldVerifier.v4';
+const CONFIDENCE_FULL_LABELS={
+  1:'1 - Very low confidence',
+  2:'2 - Low confidence',
+  3:'3 - Medium confidence',
+  4:'4 - High confidence',
+  5:'5 - Very high confidence'
+};
 const SAMPLE = [
-  {id:'001',name:'Location 001',latitude:41.0391,longitude:-73.8684,classification:'Category A',confidence:'Very low'},
-  {id:'002',name:'Location 002',latitude:41.0402,longitude:-73.8667,classification:'Category B',confidence:'Low'},
-  {id:'003',name:'Location 003',latitude:41.0378,longitude:-73.8701,classification:'Category A',confidence:'Medium'}
+  {id:'001',name:'Location 001',latitude:41.0391,longitude:-73.8684,classification:'Category A',confidence:'1 - Very low confidence'},
+  {id:'002',name:'Location 002',latitude:41.0402,longitude:-73.8667,classification:'Category B',confidence:'2 - Low confidence'},
+  {id:'003',name:'Location 003',latitude:41.0378,longitude:-73.8701,classification:'Category A',confidence:'3 - Medium confidence'}
 ];
-let data=[]; let index=0; let selectedClass=''; let confidenceThreshold=5; let map; let targetMarker; let userMarker; let accuracyCircle; let watchId=null; let deferredInstallPrompt=null;
+let data=[]; let sourceHeaders=[]; let index=0; let selectedClass=''; let confidenceThreshold=5; let map; let targetMarker; let userMarker; let accuracyCircle; let watchId=null; let deferredInstallPrompt=null;
 
 const $=id=>document.getElementById(id);
 function normalize(r){
-  const pick=(...keys)=>{for(const k of keys){if(r[k]!==undefined && String(r[k]).trim()!=='') return r[k]} return ''};
+  const source=(r && r._source && typeof r._source==='object') ? {...r._source} : {...r};
+  const pick=(...keys)=>{for(const k of keys){if(r[k]!==undefined && String(r[k]).trim()!=='') return r[k]; if(source[k]!==undefined && String(source[k]).trim()!=='') return source[k]} return ''};
   return {
+    _source:source,
     id:String(pick('id','ID','Id')).trim(), name:String(pick('name','Name','site','Site')).trim(),
-    latitude:Number(pick('latitude','Latitude','lat','Lat')), longitude:Number(pick('longitude','Longitude','lon','Lon','lng','Lng')),
+    latitude:Number(pick('latitude','Latitude','lat','Lat','y','Y')), longitude:Number(pick('longitude','Longitude','lon','Lon','lng','Lng','x','X')),
     classification:String(pick('classification','Classification','class','Class','category','Category')).trim(),
-    confidence:normalizeConfidence(pick('confidence','Confidence','confidence_level','Confidence Level','confidence level','certainty','Certainty')),
+    // In the working database, conf_level contains the categorical tier (e.g. "2 - Low").
+    // The separate confidence column is a numeric score and should not drive the tier filter.
+    confidence:normalizeConfidence(pick('conf_level','Conf_level','CONF_LEVEL','confidence_level','Confidence Level','confidence level','certainty','Certainty','confidence','Confidence')),
     fieldClassification:String(pick('fieldClassification','field_classification')).trim(), notes:String(pick('notes','Notes')).trim(),
+    check:String(pick('check','Check','CHECK')).trim(),
     reviewed:String(pick('reviewed','review_status')).toLowerCase()==='true' || ['confirmed','changed'].includes(String(pick('review_status')).toLowerCase()),
     reviewedAt:String(pick('reviewedAt','reviewed_at')).trim()
   };
@@ -23,16 +34,39 @@ function normalize(r){
 function validRow(r){return Number.isFinite(r.latitude)&&Number.isFinite(r.longitude)}
 
 function normalizeConfidence(value){
-  const raw=String(value??'').trim(); if(!raw)return '';
-  const k=raw.toLowerCase().replace(/[_-]+/g,' ').replace(/\s+/g,' ');
-  const aliases={
-    'very low':'Very low','verylow':'Very low','1':'Very low',
-    'low':'Low','2':'Low','medium':'Medium','med':'Medium','3':'Medium',
-    'high':'High','4':'High','very high':'Very high','veryhigh':'Very high','5':'Very high'
-  };
-  return aliases[k]||raw;
+  // Preserve the source label exactly (apart from surrounding whitespace).
+  // Ranking is handled separately so the original full text remains visible
+  // and is written back unchanged in the CSV export.
+  return String(value??'').trim();
 }
-function confidenceRank(value){const n=normalizeConfidence(value);const i=CONFIDENCE_LEVELS.indexOf(n);return i>=0?i+1:6}
+function confidenceRank(value){
+  const raw=String(value??'').trim();
+  if(!raw)return 6;
+
+  // Confidence values in the working data are full labels with a numeric prefix,
+  // e.g. "1 - Very low confidence". Match the number AND the full wording so a
+  // stray number elsewhere in a label cannot accidentally change the filter.
+  const normalized=raw.toLowerCase().replace(/\s+/g,' ').trim();
+  const exactPatterns=[
+    /^1\s*[-–—.:)]?\s*very low(?: confidence)?$/,
+    /^2\s*[-–—.:)]?\s*low(?: confidence)?$/,
+    /^3\s*[-–—.:)]?\s*medium(?: confidence)?$/,
+    /^4\s*[-–—.:)]?\s*high(?: confidence)?$/,
+    /^5\s*[-–—.:)]?\s*very high(?: confidence)?$/
+  ];
+  const matchIndex=exactPatterns.findIndex(re=>re.test(normalized));
+  if(matchIndex>=0)return matchIndex+1;
+
+  // Backward compatibility for CSVs created with the earlier prototype.
+  const legacy={
+    'very low':1,'very low confidence':1,
+    'low':2,'low confidence':2,
+    'medium':3,'medium confidence':3,
+    'high':4,'high confidence':4,
+    'very high':5,'very high confidence':5
+  };
+  return legacy[normalized]||6;
+}
 function eligibleIndexes(){return data.map((d,i)=>({d,i})).filter(({d})=>confidenceThreshold===5 ? true : confidenceRank(d.confidence)<=confidenceThreshold).map(({i})=>i)}
 function filterLabel(){
   if(confidenceThreshold===1)return 'Very low confidence only';
@@ -43,8 +77,8 @@ function filterLabel(){
 }
 function ensureEligibleIndex(){const e=eligibleIndexes();if(!e.length)return false;if(!e.includes(index))index=e[0];return true}
 
-function saveLocal(){localStorage.setItem(STORAGE_KEY,JSON.stringify({data,index,confidenceThreshold}));updateStats()}
-function restoreLocal(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY));if(s?.data?.length){data=s.data.map(normalize);index=Math.min(s.index||0,data.length-1);confidenceThreshold=Math.min(5,Math.max(1,Number(s.confidenceThreshold)||5));return true}}catch{} return false}
+function saveLocal(){localStorage.setItem(STORAGE_KEY,JSON.stringify({data,sourceHeaders,index,confidenceThreshold}));updateStats()}
+function restoreLocal(){try{const s=JSON.parse(localStorage.getItem(STORAGE_KEY));if(s?.data?.length){data=s.data.map(normalize);sourceHeaders=Array.isArray(s.sourceHeaders)?s.sourceHeaders:[];index=Math.min(s.index||0,data.length-1);confidenceThreshold=Math.min(5,Math.max(1,Number(s.confidenceThreshold)||5));return true}}catch{} return false}
 
 function parseCSV(text){
   const rows=[]; let row=[]; let field=''; let quoted=false;
@@ -58,12 +92,25 @@ function parseCSV(text){
   row.push(field);if(row.some(v=>v.trim()!==''))rows.push(row);
   if(rows.length<2)throw new Error('CSV needs a header row and at least one data row.');
   const headers=rows[0].map(h=>h.trim());
+  sourceHeaders=headers.slice();
   return rows.slice(1).map(vals=>normalize(Object.fromEntries(headers.map((h,i)=>[h,vals[i]??''])))).filter(validRow);
 }
 function esc(v){const s=String(v??'');return /[",\n\r]/.test(s)?`"${s.replace(/"/g,'""')}"`:s}
 function downloadCSV(){
-  const headers=['id','name','latitude','longitude','confidence','original_classification','field_classification','review_status','notes','reviewed_at'];
-  const rows=data.map(d=>[d.id,d.name,d.latitude,d.longitude,d.confidence,d.classification,d.fieldClassification,d.reviewed?(d.fieldClassification===d.classification?'confirmed':'changed'):'not_reviewed',d.notes,d.reviewedAt]);
+  // Preserve the user's original database columns and append field-review outputs.
+  // Normalize any existing Check/check column to a single lowercase `check` field.
+  const originalHeaders=(sourceHeaders.length?sourceHeaders:Object.keys(data[0]?._source||{})).filter(h=>!['check','Check','CHECK','field_classification','review_status','reviewed_at'].includes(h));
+  const headers=[...originalHeaders,'field_classification','review_status','reviewed_at','check'];
+  const rows=data.map(d=>{
+    const source=d._source||{};
+    const original=originalHeaders.map(h=>source[h]??'');
+    const changed=d.reviewed && d.fieldClassification!==d.classification;
+    // Only a classification change stamps the row as field validated. Confirming the
+    // existing class leaves the source Check value unchanged.
+    const sourceCheck=source.check??source.Check??source.CHECK??d.check??'';
+    const checkValue=changed?'field validated':sourceCheck;
+    return [...original,d.fieldClassification,d.reviewed?(changed?'changed':'confirmed'):'not_reviewed',d.reviewedAt,checkValue];
+  });
   const blob=new Blob([[headers,...rows].map(r=>r.map(esc).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`field-verification-${new Date().toISOString().slice(0,10)}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
 }
