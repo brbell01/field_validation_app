@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'fieldVerifier.v4';
+const STORAGE_KEY = 'fieldVerifier.v5';
 const CONFIDENCE_FULL_LABELS={
   1:'1 - Very low confidence',
   2:'2 - Low confidence',

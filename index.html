@@ -34,6 +34,23 @@
         <button id="resetBtn" class="button ghost danger" type="button">Clear saved data</button>
       </div>
       <p class="hint">CSV: latitude/longitude (or lat/lon), plus classification. id and name are optional.</p>
+
+      <div class="confidence-filter">
+        <div class="filter-head">
+          <label for="confidenceSlider">Confidence filter</label>
+          <strong id="confidenceFilterLabel">All confidence levels</strong>
+        </div>
+        <input id="confidenceSlider" type="range" min="1" max="5" step="1" value="5" aria-describedby="confidenceFilterHelp">
+        <div class="slider-scale" aria-hidden="true">
+          <span>Very low</span>
+          <span>Low</span>
+          <span>Medium</span>
+          <span>High</span>
+          <span>All</span>
+        </div>
+        <p id="confidenceFilterHelp" class="hint">Cumulative: moving right includes progressively higher-confidence points.</p>
+      </div>
+
       <div id="message" class="message" aria-live="polite"></div>
     </section>
 
@@ -43,6 +60,7 @@
           <div class="eyebrow">Current location</div>
           <h2 id="siteName">—</h2>
           <div id="siteMeta" class="muted">—</div>
+          <div id="confidenceMeta" class="confidence-meta">Confidence: —</div>
         </div>
         <div id="statusPill" class="pill">Not reviewed</div>
       </div>
