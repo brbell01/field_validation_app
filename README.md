@@ -46,3 +46,10 @@ Include a `confidence` column using the full numbered labels: `1 - Very low conf
 ## Database compatibility
 
 The app recognizes the working database fields `class`, `conf_level`, `confidence`, `notes`, and `Check`. Confidence filtering uses `conf_level` (for example `2 - Low`), not the numeric `confidence` score. Export preserves original database columns and adds `field_classification`, `review_status`, `reviewed_at`, and lowercase `check`. If the user changes a classification, `check` is set to `field validated`; confirming the existing classification leaves the prior check value unchanged.
+
+
+## Map and location
+- Embedded map: Leaflet 1.9.4 with Esri World Imagery + reference labels.
+- `Google Satellite` opens the current point in Google Maps satellite view using the official Maps URL format; no Google API key is required.
+- `Directions` opens Google Maps directions to the current point.
+- `Use my location` uses the browser Geolocation API. It requires HTTPS and user permission. GitHub Pages provides HTTPS automatically.

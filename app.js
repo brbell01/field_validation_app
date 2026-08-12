@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'fieldVerifier.v5';
+const STORAGE_KEY = 'fieldVerifier.v6';
 const CONFIDENCE_FULL_LABELS={
   1:'1 - Very low confidence',
   2:'2 - Low confidence',
@@ -11,7 +11,7 @@ const SAMPLE = [
   {id:'002',name:'Location 002',latitude:41.0402,longitude:-73.8667,classification:'Category B',confidence:'2 - Low confidence'},
   {id:'003',name:'Location 003',latitude:41.0378,longitude:-73.8701,classification:'Category A',confidence:'3 - Medium confidence'}
 ];
-let data=[]; let sourceHeaders=[]; let index=0; let selectedClass=''; let confidenceThreshold=5; let map; let targetMarker; let userMarker; let accuracyCircle; let watchId=null; let deferredInstallPrompt=null;
+let data=[]; let sourceHeaders=[]; let index=0; let selectedClass=''; let confidenceThreshold=5; let map; let targetMarker; let userMarker; let accuracyCircle; let deferredInstallPrompt=null;
 
 const $=id=>document.getElementById(id);
 function normalize(r){
@@ -117,17 +117,59 @@ function downloadCSV(){
 function getClasses(){return [...new Set(data.map(d=>d.classification).filter(Boolean))].sort((a,b)=>a.localeCompare(b))}
 function updateStats(){const e=eligibleIndexes().map(i=>data[i]);$('totalCount').textContent=e.length;$('reviewedCount').textContent=e.filter(d=>d.reviewed).length;$('changedCount').textContent=e.filter(d=>d.reviewed&&d.fieldClassification!==d.classification).length;$('confidenceFilterLabel').textContent=filterLabel();$('confidenceSlider').value=String(confidenceThreshold)}
 function initMap(){
-  if(map)return;
-  map=L.map('map',{zoomControl:true});
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,attribution:'Tiles © Esri'}).addTo(map);
-  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,attribution:'Labels © Esri',pane:'overlayPane'}).addTo(map);
+  if(map)return map;
+  const el=$('map');
+  if(!el || el.offsetParent===null)return null;
+
+  map=L.map(el,{zoomControl:true,attributionControl:true,preferCanvas:true});
+
+  // Leaflet provides the interactive map. Esri World Imagery supplies the
+  // embedded satellite imagery; Google Maps is used via official Maps URLs
+  // for satellite viewing and directions outside the app.
+  const imagery=L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:20,maxNativeZoom:19,attribution:'Imagery &copy; Esri'}
+  ).addTo(map);
+
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex=650;
+  map.getPane('labels').style.pointerEvents='none';
+  L.tileLayer(
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:20,maxNativeZoom:19,attribution:'Labels &copy; Esri',pane:'labels'}
+  ).addTo(map);
+
+  imagery.on('tileerror',()=>{
+    $('mapStatus').textContent='Some satellite tiles could not load. Check your connection or open the point in Google Satellite.';
+  });
+  imagery.on('load',()=>{
+    if($('mapStatus').textContent.startsWith('Loading')) $('mapStatus').textContent='Satellite reference';
+  });
+
+  return map;
 }
 function divIcon(cls){return L.divIcon({className:'',html:`<div class="${cls}"></div>`,iconSize:[22,22],iconAnchor:[11,11]})}
 function updateMap(){
-  initMap(); const d=data[index]; const ll=[d.latitude,d.longitude];
-  if(targetMarker)targetMarker.setLatLng(ll);else targetMarker=L.marker(ll,{icon:divIcon('target-marker'),zIndexOffset:1000}).addTo(map);
-  map.setView(ll,19); setTimeout(()=>map.invalidateSize(),30);
-  $('directionsLink').href=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.latitude+','+d.longitude)}`;
+  const d=data[index];
+  if(!d)return;
+  $('mapStatus').textContent='Loading satellite reference…';
+
+  // The workspace may have just changed from display:none. Waiting for the
+  // next paint before creating/updating Leaflet gives it the correct size.
+  requestAnimationFrame(()=>{
+    const m=initMap();
+    if(!m)return;
+    const ll=[d.latitude,d.longitude];
+    if(targetMarker)targetMarker.setLatLng(ll);
+    else targetMarker=L.marker(ll,{icon:divIcon('target-marker'),zIndexOffset:1000}).addTo(m);
+    m.setView(ll,18,{animate:false});
+    m.invalidateSize({pan:false});
+    setTimeout(()=>m.invalidateSize({pan:false}),250);
+  });
+
+  const coord=encodeURIComponent(`${d.latitude},${d.longitude}`);
+  $('directionsLink').href=`https://www.google.com/maps/dir/?api=1&destination=${coord}`;
+  $('googleSatelliteLink').href=`https://www.google.com/maps/@?api=1&map_action=map&center=${coord}&zoom=19&basemap=satellite`;
 }
 function renderClasses(){const box=$('classButtons');box.innerHTML='';getClasses().forEach(c=>{const b=document.createElement('button');b.type='button';b.className='button class-button'+(selectedClass===c?' selected':'');b.textContent=c;b.addEventListener('click',()=>{selectedClass=c;$('customClass').value='';renderClasses()});box.appendChild(b)})}
 function render(){
@@ -141,11 +183,54 @@ function render(){
 function review(value){const d=data[index];d.fieldClassification=value;d.notes=$('notes').value.trim();d.reviewed=true;d.reviewedAt=new Date().toISOString();saveLocal();const e=eligibleIndexes();const pos=e.indexOf(index);const next=e.slice(pos+1).find(i=>!data[i].reviewed);if(next!==undefined)index=next;render();saveLocal()}
 function haversine(lat1,lon1,lat2,lon2){const R=6371000,toRad=x=>x*Math.PI/180;const a=Math.sin(toRad(lat2-lat1)/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(toRad(lon2-lon1)/2)**2;return 2*R*Math.asin(Math.sqrt(a))}
 function formatDistance(m){return m<1000?`${Math.round(m)} m from target`:`${(m/1000).toFixed(2)} km from target`}
-function startLocation(){
-  if(!navigator.geolocation){$('distanceText').textContent='Geolocation unavailable in this browser.';return}
-  $('distanceText').textContent='Locating…'; if(watchId!==null)navigator.geolocation.clearWatch(watchId);
-  watchId=navigator.geolocation.watchPosition(pos=>{const {latitude,longitude,accuracy}=pos.coords;const d=data[index];const ll=[latitude,longitude];if(userMarker)userMarker.setLatLng(ll);else userMarker=L.marker(ll,{icon:divIcon('user-marker'),zIndexOffset:1100}).addTo(map);if(accuracyCircle){accuracyCircle.setLatLng(ll).setRadius(accuracy)}else accuracyCircle=L.circle(ll,{radius:accuracy,weight:1,opacity:.5,fillOpacity:.08}).addTo(map);$('distanceText').textContent=`${formatDistance(haversine(latitude,longitude,d.latitude,d.longitude))} • accuracy ±${Math.round(accuracy)} m`;},err=>{$('distanceText').textContent=`Location unavailable: ${err.message}`},{enableHighAccuracy:true,maximumAge:3000,timeout:15000})
+function locationErrorMessage(err){
+  if(!window.isSecureContext)return 'Location requires HTTPS. Open the GitHub Pages https:// address, not a local file.';
+  if(!err)return 'Could not determine your location.';
+  if(err.code===1)return 'Location permission was denied. Allow Location for this site in your browser settings, then try again.';
+  if(err.code===2)return 'Your device could not determine a location. Try moving outdoors or turning on Wi‑Fi/GPS.';
+  if(err.code===3)return 'Location timed out. Try again; a less precise reading will also be accepted.';
+  return `Location unavailable: ${err.message||'unknown error'}`;
 }
+
+function applyUserPosition(pos){
+  const {latitude,longitude,accuracy}=pos.coords;
+  const d=data[index];
+  const m=initMap();
+  if(!m || !d)return;
+  const ll=[latitude,longitude];
+  if(userMarker)userMarker.setLatLng(ll);
+  else userMarker=L.marker(ll,{icon:divIcon('user-marker'),zIndexOffset:1100}).addTo(m);
+  if(accuracyCircle)accuracyCircle.setLatLng(ll).setRadius(accuracy);
+  else accuracyCircle=L.circle(ll,{radius:accuracy,weight:1,opacity:.6,fillOpacity:.08}).addTo(m);
+  $('distanceText').textContent=`${formatDistance(haversine(latitude,longitude,d.latitude,d.longitude))} • accuracy ±${Math.round(accuracy)} m`;
+  $('locateBtn').textContent='Update my location';
+}
+
+function startLocation(){
+  if(!window.isSecureContext){$('distanceText').textContent=locationErrorMessage();return}
+  if(!navigator.geolocation){$('distanceText').textContent='Geolocation is unavailable in this browser.';return}
+  $('distanceText').textContent='Getting your location…';
+  $('locateBtn').disabled=true;
+
+  const finish=()=>{$('locateBtn').disabled=false};
+  const success=pos=>{applyUserPosition(pos);finish()};
+  const fallbackError=err=>{$('distanceText').textContent=locationErrorMessage(err);finish()};
+
+  // First request a high-accuracy fix. If it times out/unavailable, immediately
+  // try a faster network-based fix instead of simply failing.
+  navigator.geolocation.getCurrentPosition(
+    success,
+    err=>{
+      if(err.code===1){fallbackError(err);return}
+      navigator.geolocation.getCurrentPosition(
+        success, fallbackError,
+        {enableHighAccuracy:false,maximumAge:60000,timeout:10000}
+      );
+    },
+    {enableHighAccuracy:true,maximumAge:5000,timeout:12000}
+  );
+}
+
 
 $('fileInput').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const parsed=parseCSV(r.result);if(!parsed.length)throw new Error('No valid latitude/longitude rows found.');data=parsed;index=0;saveLocal();render();$('message').textContent=`Loaded ${data.length} locations from ${f.name}.`}catch(err){$('message').textContent=err.message}};r.readAsText(f)});
 $('sampleBtn').addEventListener('click',()=>{data=SAMPLE.map(normalize);index=0;saveLocal();render();$('message').textContent='Sample data loaded.'});
